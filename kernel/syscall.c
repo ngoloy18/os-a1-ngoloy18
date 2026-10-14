@@ -103,6 +103,7 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_sync(void);
+extern uint64 sys_trace(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -130,8 +131,38 @@ static uint64 (*syscalls[])(void) = {
   [SYS_mkdir]   = sys_mkdir,
   [SYS_close]   = sys_close,
   [SYS_sync]    = sys_sync,
+  [SYS_trace] sys_trace,
   // clang-format on
 };
+
+static char *syscall_names[] = {
+  [SYS_fork] = "fork",
+  [SYS_exit] = "exit",
+  [SYS_wait] = "wait",
+  [SYS_pipe] = "pipe",
+  [SYS_read] = "read",
+  [SYS_kill] = "kill",
+  [SYS_exec] = "exec",
+  [SYS_fstat] = "fstat",
+  [SYS_chdir] = "chdir",
+  [SYS_dup] = "dup",
+  [SYS_getpid] = "getpid",
+  [SYS_sbrk] = "sbrk",
+  [SYS_pause] = "pause",
+  [SYS_uptime] = "uptime",
+  [SYS_open] = "open",
+  [SYS_write] = "write",
+  [SYS_mknod] = "mknod",
+  [SYS_unlink] = "unlink",
+  [SYS_link] = "link",
+  [SYS_mkdir] = "mkdir",
+  [SYS_close] = "close",
+  [SYS_sync] = "sync",
+  [SYS_trace] = "trace",
+};
+
+
+
 
 void
 syscall(void)
@@ -140,12 +171,47 @@ syscall(void)
   struct proc *p = myproc();
 
   num = p->trapframe->a7;
-  if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    // Use num to lookup the system call function for num, call it,
-    // and store its return value in p->trapframe->a0
+
+  if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    int first_arg = (int)p->trapframe->a0;
+    char str_arg[128];
+    int string_call = 0;
+    int string_valid = 0;
+
+    if(num == SYS_open || num == SYS_exec ||
+       num == SYS_chdir || num == SYS_mkdir ||
+       num == SYS_unlink || num == SYS_link ||
+       num == SYS_mknod) {
+      string_call = 1;
+      if(fetchstr((uint64)p->trapframe->a0,
+                  str_arg, sizeof(str_arg)) >= 0)
+        string_valid = 1;
+    }
+
     p->trapframe->a0 = syscalls[num]();
+
+    if(p->trace_mask & (1U << num)) {
+      int ret = (int)p->trapframe->a0;
+
+      printk("[%d] %s(", p->pid, syscall_names[num]);
+
+      if(string_call) {
+        if(string_valid)
+          printk("\"%s\"", str_arg);
+        else
+          printk("?");
+      } else if(num != SYS_fork &&
+                num != SYS_getpid &&
+                num != SYS_uptime &&
+                num != SYS_sync) {
+        printk("%d", first_arg);
+      }
+
+      printk(") -> %d\n", ret);
+    }
   } else {
-    printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
+    printk("%d %s: unknown sys call %d\n",
+           p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
 }
