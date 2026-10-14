@@ -198,21 +198,23 @@ syscall(void)
     if(p->trace_mask & (1U << num)) {
       int ret = (int)p->trapframe->a0;
 
-      printk("[%d] %s(", p->pid, syscall_names[num]);
-
       if(string_call) {
         if(string_valid)
-          printk("\"%s\"", str_arg);
+          printk("[%d] %s(\"%s\") -> %d\n",
+                 p->pid, syscall_names[num], str_arg, ret);
         else
-          printk("?");
-      } else if(num != SYS_fork &&
-                num != SYS_getpid &&
-                num != SYS_uptime &&
-                num != SYS_sync) {
-        printk("%d", first_arg);
+          printk("[%d] %s(?) -> %d\n",
+                 p->pid, syscall_names[num], ret);
+      } else if(num == SYS_fork ||
+                num == SYS_getpid ||
+                num == SYS_uptime ||
+                num == SYS_sync) {
+        printk("[%d] %s() -> %d\n",
+               p->pid, syscall_names[num], ret);
+      } else {
+        printk("[%d] %s(%d) -> %d\n",
+               p->pid, syscall_names[num], first_arg, ret);
       }
-
-      printk(") -> %d\n", ret);
     }
   } else {
     printk("%d %s: unknown sys call %d\n",
